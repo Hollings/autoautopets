@@ -7,7 +7,7 @@ import pyautogui as gui
 
 from clickable import Clickable
 from field_slot import FieldSlot
-
+import os
 
 class AutoPetsControl:
     def __init__(self):
@@ -19,6 +19,9 @@ class AutoPetsControl:
         self.coordinates = json.load(open('coordinates.json'))
         self._initialize_object_coordinates()
         self.money = 10
+        self.games = 0
+        self.turn = 0
+        self.status_message = f"Initializing"
         gui.PAUSE = 0.1
 
     def move_mouse_to(self, coords):
@@ -73,7 +76,7 @@ class AutoPetsControl:
                 break
 
         if buy_food:
-            print("buying food")
+            self.update_status_message(f"Buying food")
             sleep(1)
             self.buy(self.shop[5], self.team[random.randint(0, 4)], True, True)
             self.buy(self.shop[6], self.team[random.randint(0, 4)], True, True)
@@ -81,17 +84,20 @@ class AutoPetsControl:
 
     def sell(self, team_slot: FieldSlot):
         if team_slot.is_occupied():
+            self.update_status_message(f"Selling animal {self.team.index(team_slot)}")
             team_slot.click()
             self.ui['sell'].click()
 
     def sell_phase(self):
-        if random.randint(0, 3) == 0:
+        if random.randint(0, 4) == 0:
+            self.update_status_message("Selling animal")
             self.sell(self.team[random.randint(0, 4)])
 
     def upgrade(self, team_slot_1: FieldSlot):
         if team_slot_1.is_occupied():
             for shop_animal in apc.shop:
                 if shop_animal.animal() == team_slot_1.animal():
+                    self.update_status_message(f"Upgrading animal {self.team.index(team_slot_1)}")
                     shop_animal.click()
                     team_slot_1.click()
 
@@ -103,22 +109,22 @@ class AutoPetsControl:
         self.ui['end'].click()
 
     def wait_for_battle(self):
-        pass
-        # ff = False
-        # while True:
-        #     color = get_color(coordinates["end"])
-        #     sleep(1)
-        #     # check for ff button and click it
-        #     if not ff and get_color(coordinates["pause"]) == (255, 255, 255):
-        #         click_thing(coordinates["fast_forward"])
-        #         ff = True
-        #     click_thing(coordinates["sell"])
-        #     if color == (255, 106, 0):
-        #         # new round
-        #         return False
-        #     elif color == (0, 39, 58):
-        #         # game over
-        #         return True
+        self.update_status_message(f"Waiting for battle end")
+
+        sleep(10)
+        self.ui['fast_forward'].click()
+        while True:
+            end_button = gui.locateOnScreen('images/end.png', confidence=0.9)
+            if end_button:
+                print("battle end")
+                return False
+
+            play_button = gui.locateOnScreen('images/play.png', confidence=0.9)
+            if play_button:
+                print("game over")
+                return True
+            self.ui['sell'].click()
+            sleep(1)
 
     def render_field(self):
         rendering = ""
@@ -187,13 +193,40 @@ class AutoPetsControl:
 
         print(json.dumps(coordinates, cls=NpEncoder))
 
+    def update_status_message(self, text):
+        self.status_message = text
+        os.system('cls')
+        print( f"Game {self.games} turn {self.turn}: {self.status_message}")
 
 if __name__ == '__main__':
     apc = AutoPetsControl()
     # apc.calibrate_coordinates()
-    apc.sell_phase()
-    for i in range(2):
-        apc.upgrade_phase()
-        apc.buy_phase(i>0)
-        apc.ui['roll'].click()
-    apc.ui['end'].click()
+    while True:
+        apc.games += 1
+        apc.turn = 1
+        apc.update_status_message("Starting Game")
+        apc.ui['play'].click()
+        sleep(2)
+        game_over = False
+        first_turn = True
+        while not game_over:
+            if first_turn:
+                apc.buy_phase(0)
+                apc.update_status_message("Choosing team name")
+                apc.ui['end'].click(True)
+                apc.ui['team_name_1'].click()
+                apc.ui['team_name_2'].click()
+                apc.ui['end'].click(True)
+                first_turn = False
+            else:
+                apc.sell_phase()
+                for i in range(3):
+                    apc.upgrade_phase()
+                    apc.buy_phase(i>1)
+                    apc.ui['roll'].click()
+                apc.ui['roll'].click()
+            apc.ui['end'].click()
+            apc.turn+=1
+            game_over = apc.wait_for_battle()
+
+
